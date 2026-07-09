@@ -193,6 +193,9 @@ export type AdminStats = {
 // ─── DATABASE SCHEMA TYPE ───────────────────────────────────
 
 export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "12";
+  };
   public: {
     Tables: {
       profiles: { Row: Profile; Insert: Partial<Profile> & { id: string; email: string }; Update: Partial<Profile> };

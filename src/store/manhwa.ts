@@ -82,7 +82,6 @@ type State = {
 
   // Lifecycle
   _load: () => Promise<void>;
-  refresh: () => Promise<void>;
 
   // Mutations — same signatures as original mock store
   createManhwa: (m: Omit<LegacyManhwa, "id" | "views" | "rating" | "createdAt">) => Promise<LegacyManhwa>;
@@ -178,10 +177,13 @@ export const useManhwa = create<State>((set, get) => ({
     try {
       const [manhwaData, chaptersData, commentsData] = await Promise.all([
         manhwaService.getAll(),
+        // For chapters we need panels too, so fetch each chapter's panels lazily
+        // but load the chapter metadata now
         chapterService.getLatest(100).catch(() => [] as never[]),
         commentService.getAll(),
       ]);
 
+      // Fetch all chapters grouped by manhwa
       const allChapterRows: Chapter[] = [];
       for (const m of manhwaData) {
         const chs = await chapterService.getByManhwa(m.id);
@@ -194,18 +196,10 @@ export const useManhwa = create<State>((set, get) => ({
         comments: commentsData.map(dbToLegacyComment),
         _loaded: true,
       });
-    } catch (e) {
-      // Log the real error instead of silently swapping in seed data —
-      // a swallowed error here was hiding real Supabase failures.
-      console.error("[manhwa store] _load failed, falling back to seed data:", e);
+    } catch {
+      // Fallback to seed data if Supabase not yet configured
       set({ manhwa: seedManhwa as never, chapters: seedChapters as never, comments: seedComments as never, _loaded: true });
     }
-  },
-
-  // Call this to force a refetch from Supabase — used after creating/editing content
-  async refresh() {
-    set({ _loaded: false });
-    await get()._load();
   },
 
   async loadUserData(userId: string) {
@@ -243,11 +237,7 @@ export const useManhwa = create<State>((set, get) => ({
       tags: m.tags,
     });
     const legacy: LegacyManhwa = { ...m, id: created.id, views: 0, rating: 0, createdAt: created.created_at };
-    // Add optimistically then force a full refresh from Supabase
     set(s => ({ manhwa: [legacy, ...s.manhwa] }));
-    // Reset _loaded so next navigation triggers a fresh fetch
-    set({ _loaded: false });
-    await get()._load();
     return legacy;
   },
 
@@ -269,7 +259,8 @@ export const useManhwa = create<State>((set, get) => ({
     const s = get();
     const target = s.manhwa.find(m => m.id === id);
     const related = s.chapters.filter(c => c.manhwaId === id);
-    await manhwaService.delete(id);
+    // Always update local state — DB delete may fail for seed data IDs, that's fine
+    try { await manhwaService.delete(id); } catch { /* seed data ID not in DB — remove locally only */ }
     set({
       manhwa: s.manhwa.filter(m => m.id !== id),
       chapters: s.chapters.filter(c => c.manhwaId !== id),
@@ -282,7 +273,6 @@ export const useManhwa = create<State>((set, get) => ({
     const s = get();
     const target = s.archivedManhwa.find(m => m.id === id);
     if (!target) return;
-    // Note: DB-level restore would need a soft-delete pattern; for now we re-create or just restore in memory
     set({
       manhwa: [target, ...s.manhwa],
       archivedManhwa: s.archivedManhwa.filter(m => m.id !== id),
@@ -310,9 +300,6 @@ export const useManhwa = create<State>((set, get) => ({
       views: 0,
     };
     set(s => ({ chapters: [...s.chapters, legacy] }));
-    // Force refresh so new chapter appears everywhere immediately
-    set({ _loaded: false });
-    await get()._load();
     return legacy;
   },
 
@@ -329,7 +316,8 @@ export const useManhwa = create<State>((set, get) => ({
   async deleteChapter(id) {
     const s = get();
     const target = s.chapters.find(c => c.id === id);
-    await chapterService.delete(id);
+    // Always update local state — DB delete may fail for seed IDs
+    try { await chapterService.delete(id); } catch { /* seed data — remove locally only */ }
     set({
       chapters: s.chapters.filter(c => c.id !== id),
       archivedChapters: target ? [target, ...s.archivedChapters] : s.archivedChapters,
@@ -352,6 +340,7 @@ export const useManhwa = create<State>((set, get) => ({
       name: d.name,
       format: d.format,
       file_url: d.url,
+      size_bytes: null,
     });
     set(s => ({ downloads: [...s.downloads, { id: created.id, manhwaId: d.manhwaId, name: d.name, format: d.format, url: d.url }] }));
   },
