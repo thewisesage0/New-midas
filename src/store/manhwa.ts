@@ -196,8 +196,9 @@ export const useManhwa = create<State>((set, get) => ({
         comments: commentsData.map(dbToLegacyComment),
         _loaded: true,
       });
-    } catch {
-      // Fallback to seed data if Supabase not yet configured
+    } catch (err) {
+      // Fallback to seed data if Supabase not yet configured or a request failed
+      console.error("[manhwa store] failed to load live data, falling back to seed data:", err);
       set({ manhwa: seedManhwa as never, chapters: seedChapters as never, comments: seedComments as never, _loaded: true });
     }
   },

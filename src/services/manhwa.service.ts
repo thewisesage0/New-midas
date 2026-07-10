@@ -348,7 +348,7 @@ export const commentService = {
   async getByManhwa(manhwaId: string): Promise<CommentWithProfile[]> {
     const { data, error } = await supabase
       .from("comments")
-      .select("*, profiles(id, display_name, avatar_url, role)")
+      .select("*, profiles!comments_user_id_fkey(id, display_name, avatar_url, role)")
       .eq("manhwa_id", manhwaId)
       .eq("deleted", false)
       .is("chapter_id", null)
@@ -361,7 +361,7 @@ export const commentService = {
   async getByChapter(chapterId: string): Promise<CommentWithProfile[]> {
     const { data, error } = await supabase
       .from("comments")
-      .select("*, profiles(id, display_name, avatar_url, role)")
+      .select("*, profiles!comments_user_id_fkey(id, display_name, avatar_url, role)")
       .eq("chapter_id", chapterId)
       .eq("deleted", false)
       .order("pinned", { ascending: false })
@@ -373,7 +373,7 @@ export const commentService = {
   async getAll(): Promise<CommentWithProfile[]> {
     const { data, error } = await supabase
       .from("comments")
-      .select("*, profiles(id, display_name, avatar_url, role), manhwa(title)")
+      .select("*, profiles!comments_user_id_fkey(id, display_name, avatar_url, role), manhwa!comments_manhwa_id_fkey(title)")
       .eq("deleted", false)
       .order("pinned", { ascending: false })
       .order("created_at", { ascending: false });
@@ -440,7 +440,7 @@ export const reviewService = {
   async getByManhwa(manhwaId: string): Promise<ReviewWithProfile[]> {
     const { data, error } = await supabase
       .from("reviews")
-      .select("*, profiles(id, display_name, avatar_url)")
+      .select("*, profiles!reviews_user_id_fkey(id, display_name, avatar_url)")
       .eq("manhwa_id", manhwaId)
       .order("created_at", { ascending: false });
     if (error) throw error;
