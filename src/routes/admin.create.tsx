@@ -67,17 +67,14 @@ function ImageUploadField({
     setUploading(true);
     setErr(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not logged in. Please sign in again.");
-
       const ext = file.name.split(".").pop();
       const fullPath = `${path}.${ext}`;
       const { error } = await supabase.storage.from(bucket).upload(fullPath, file, { upsert: true });
-      if (error) throw new Error(error.message);
+      if (error) throw error;
       const { data } = supabase.storage.from(bucket).getPublicUrl(fullPath);
       onChange(data.publicUrl);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : JSON.stringify(e));
+    } catch {
+      setErr("Upload failed. Check storage bucket exists.");
     } finally {
       setUploading(false);
     }
@@ -237,8 +234,6 @@ export function AdminCreateManhwaPage() {
         banner: bannerUrl || undefined,
         genres,
         tags,
-        views: 0,
-        rating: 0,
       });
 
       // If admin note, save as a pinned comment so it shows on the manhwa page

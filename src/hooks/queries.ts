@@ -119,7 +119,7 @@ export function useLatestChapters(limit = 10) {
 export function useCreateChapter() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: chapterService.create.bind(chapterService),
+    mutationFn: (payload: Parameters<typeof chapterService.create>[0]) => chapterService.create(payload),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: QK.chaptersByManhwa(vars.manhwa_id) });
       qc.invalidateQueries({ queryKey: QK.chaptersLatest });
