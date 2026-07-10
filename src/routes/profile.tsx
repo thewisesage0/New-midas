@@ -6,7 +6,7 @@ import { profileService } from "@/services/auth.service";
 import { Camera } from "lucide-react";
 
 export function ProfilePage() {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, loading, updateProfile, logout } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name ?? "");
   const [busy, setBusy] = useState(false);
@@ -14,7 +14,11 @@ export function ProfilePage() {
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (!user) navigate({ to: "/auth" }); }, [user, navigate]);
+  useEffect(() => {
+    if (loading) return;
+    if (!user) navigate({ to: "/auth" });
+  }, [user, loading, navigate]);
+  if (loading) return null;
   if (!user) return null;
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

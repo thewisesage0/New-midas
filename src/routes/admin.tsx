@@ -12,13 +12,16 @@ const items = [
 ] as const;
 
 export function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const loc = useLocation();
 
   useEffect(() => {
+    if (loading) return;
     if (!user || user.role !== "admin") navigate({ to: "/auth" });
-  }, [user, navigate, loc.pathname]);
+  }, [user, loading, navigate, loc.pathname]);
+
+  if (loading) return null;
 
   if (!user || user.role !== "admin") return null;
 

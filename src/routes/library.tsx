@@ -6,14 +6,16 @@ import { EmberField } from "@/components/EmberField";
 import { Bookmark, BookOpen, Clock } from "lucide-react";
 
 export function LibraryPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { manhwa, library, progress, downloads } = useManhwa();
 
   useEffect(() => {
+    if (loading) return;
     if (!user) navigate({ to: "/auth" });
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
+  if (loading) return null;
   if (!user) return null;
 
   const savedIds = library[user.id] ?? [];
