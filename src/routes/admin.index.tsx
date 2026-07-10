@@ -21,10 +21,11 @@ function Stat({ label, value, icon: Icon, hint }: { label: string; value: string
   );
 }
 
-function fmt(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-  return String(n);
+function fmt(n: number | null | undefined): string {
+  const v = n ?? 0;
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+  if (v >= 1_000) return (v / 1_000).toFixed(1) + "K";
+  return String(v);
 }
 
 export function AdminDashboard() {

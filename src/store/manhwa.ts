@@ -122,7 +122,7 @@ function dbToLegacyManhwa(m: ManhwaWithRelations): LegacyManhwa {
     blurb: m.blurb ?? "",
     year: m.year ?? new Date().getFullYear(),
     views: m.views,
-    rating: m.rating,
+    rating: m.rating ?? 0,
     createdAt: m.created_at,
   };
 }

@@ -105,11 +105,11 @@ export const manhwaService = {
   },
 
   async incrementView(id: string) {
-    // Use rpc or just direct update - no RLS block needed for views
-    await supabase.rpc("increment_manhwa_views" as never, { manhwa_id: id }).catch(() => {
-      // Fallback: analytics event
-      supabase.from("analytics").insert({ manhwa_id: id, event: "manhwa_view" });
-    });
+    const { error } = await supabase.rpc("increment_manhwa_views", { manhwa_id: id });
+    if (error) {
+      // Fallback: log an analytics event instead
+      await supabase.from("analytics").insert({ manhwa_id: id, event: "manhwa_view" });
+    }
   },
 
   async uploadCover(manhwaId: string, file: File, bucket: "covers" | "banners"): Promise<string> {
@@ -196,12 +196,15 @@ export const chapterService = {
   },
 
   async trackView(chapterId: string, manhwaId: string) {
-    await Promise.all([
-      supabase.from("analytics").insert({ chapter_id: chapterId, manhwa_id: manhwaId, event: "chapter_view" }),
-      supabase.from("chapters").update({ views: supabase.rpc("" as never) }).eq("id", chapterId).then(() => null).catch(() => null),
-    ]);
-    // Direct increment via raw SQL increment
-    await supabase.rpc("increment_chapter_views" as never, { chapter_id: chapterId }).catch(() => null);
+    await supabase.from("analytics").insert({ chapter_id: chapterId, manhwa_id: manhwaId, event: "chapter_view" });
+    const { error } = await supabase.rpc("increment_chapter_views", { chapter_id: chapterId });
+    if (error) {
+      // Fallback: manual increment if the RPC function is unavailable
+      const { data } = await supabase.from("chapters").select("views").eq("id", chapterId).single();
+      if (data) {
+        await supabase.from("chapters").update({ views: (data.views ?? 0) + 1 }).eq("id", chapterId);
+      }
+    }
   },
 };
 
