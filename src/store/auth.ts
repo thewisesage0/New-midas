@@ -1,11 +1,9 @@
 import { create } from "zustand";
-import { supabase } from "@/lib/supabase";
 import { authService, profileService } from "@/services/auth.service";
 import type { Profile } from "@/types/database";
 
 export type Role = "admin" | "reader";
 
-// Same external shape as the old mock store — zero component changes needed
 export type User = {
   id: string;
   email: string;
@@ -27,8 +25,10 @@ type State = {
   updateProfile: (patch: Partial<Pick<User, "name" | "avatar">>) => Promise<void>;
   logout: () => Promise<void>;
 
+  // Called by boot() in main.tsx
   _setUserFromProfile: (profile: Profile) => void;
   _clear: () => void;
+  // Keep _init as no-op for any leftover references
   _init: () => void;
 };
 
@@ -46,9 +46,9 @@ function mapProfileToUser(profile: Profile): User {
 export const useAuth = create<State>((set, get) => ({
   user: null,
   profile: null,
-  loading: true,
+  loading: true, // starts true, boot() resolves it
 
-  _setUserFromProfile(profile: Profile) {
+  _setUserFromProfile(profile) {
     set({ user: mapProfileToUser(profile), profile, loading: false });
   },
 
@@ -57,27 +57,7 @@ export const useAuth = create<State>((set, get) => ({
   },
 
   _init() {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const profile = await profileService.getProfile(session.user.id);
-        if (profile) get()._setUserFromProfile(profile);
-        else set({ loading: false });
-      } else {
-        get()._clear();
-      }
-    });
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await profileService.getProfile(session.user.id);
-        if (profile) get()._setUserFromProfile(profile);
-        else set({ loading: false });
-      } else {
-        set({ loading: false });
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    // No-op — boot() in main.tsx handles this now
   },
 
   async loginAdmin(email, password) {
@@ -89,16 +69,16 @@ export const useAuth = create<State>((set, get) => ({
       await authService.signOut();
       return { ok: false, error: "Access denied. Not an admin account." };
     }
-    get()._setUserFromProfile(profile);
+    // Note: main.tsx's onAuthStateChange listener will pick up the SIGNED_IN
+    // event and set the user automatically — no need to duplicate that here.
     return { ok: true };
   },
 
   async loginReader(email, password) {
     const result = await authService.signIn(email, password);
     if (!result.ok) return { ok: false, error: result.error };
-    const profile = await profileService.getProfile(result.session.user.id);
-    if (!profile) return { ok: false, error: "Profile not found." };
-    get()._setUserFromProfile(profile);
+    // Note: main.tsx's onAuthStateChange listener will pick up the SIGNED_IN
+    // event and set the user automatically — no need to duplicate that here.
     return { ok: true };
   },
 
@@ -106,10 +86,9 @@ export const useAuth = create<State>((set, get) => ({
     if (password.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
     const result = await authService.signUp(email, password, name);
     if (!result.ok) return { ok: false, error: result.error };
-    const loginResult = await authService.signIn(email, password);
-    if (!loginResult.ok) return { ok: true };
-    const profile = await profileService.getProfile(loginResult.session.user.id);
-    if (profile) get()._setUserFromProfile(profile);
+    // Auto sign-in after signup — onAuthStateChange will pick up the
+    // resulting SIGNED_IN event and set the user automatically.
+    await authService.signIn(email, password);
     return { ok: true };
   },
 
@@ -126,9 +105,7 @@ export const useAuth = create<State>((set, get) => ({
       display_name: patch.name,
       avatar_url: patch.avatar,
     });
-    set((s) => ({
-      user: s.user ? { ...s.user, ...patch } : null,
-    }));
+    set((s) => ({ user: s.user ? { ...s.user, ...patch } : null }));
   },
 
   async logout() {
