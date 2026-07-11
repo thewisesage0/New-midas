@@ -1,66 +1,76 @@
-import { StrictMode, useEffect } from "react";
+import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { routeTree } from "./routeTree";
 import { useAuth } from "@/store/auth";
 import { useManhwa } from "@/store/manhwa";
+import { supabase } from "@/lib/supabase";
+import { profileService } from "@/services/auth.service";
 import "./styles.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 1000 * 60 * 5,
-    },
+    queries: { retry: 1, staleTime: 1000 * 60 * 5 },
   },
 });
 
 const router = createRouter({ routeTree });
 
 declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
+  interface Register { router: typeof router; }
 }
 
-// Bootstraps Supabase auth listener and initial data load exactly once
-function AppBootstrap({ children }: { children: React.ReactNode }) {
-  const _init = useAuth(s => s._init);
-  const _load = useManhwa(s => s._load);
+// ─── BOOT — called once before React renders, immune to StrictMode ───
+let booted = false;
+function boot() {
+  if (booted) return;
+  booted = true;
 
-  useEffect(() => {
-    const cleanup = _init();
-    _load();
-    return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Auth state listener — also fires immediately on load with the current
+  // session (Supabase's INITIAL_SESSION event), so this single listener
+  // covers both "restore session on reload" and all subsequent changes.
+  // (Previously there was a second, separate getSession() call doing the
+  // same restoration in parallel — the two raced each other and could
+  // clobber each other's result, which is why login sometimes appeared
+  // to silently fail on reload.)
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (session?.user) {
+      const profile = await profileService.getProfile(session.user.id);
+      if (profile) useAuth.getState()._setUserFromProfile(profile);
+      else useAuth.getState()._clear();
+    } else {
+      useAuth.getState()._clear();
+    }
+  });
 
-  return <>{children}</>;
+  // Load manhwa data
+  useManhwa.getState()._load();
 }
 
-// Load user-specific data (library, progress) when auth state settles
+boot();
+
+// ─── REACT TREE ──────────────────────────────────────────────
+
 function UserDataLoader() {
-  const user = useAuth(s => s.user);
+  const userId = useAuth(s => s.user?.id);
   const loadUserData = useManhwa(s => s.loadUserData);
-
   useEffect(() => {
-    if (user?.id) loadUserData(user.id);
-  }, [user?.id, loadUserData]);
-
+    if (userId) loadUserData(userId);
+  }, [userId, loadUserData]);
   return null;
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <UserDataLoader />
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
 }
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Root element not found");
 
-createRoot(rootEl).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AppBootstrap>
-        <UserDataLoader />
-        <RouterProvider router={router} />
-      </AppBootstrap>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+createRoot(rootEl).render(<App />);
